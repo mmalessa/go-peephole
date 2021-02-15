@@ -2,6 +2,7 @@ package kubetools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -89,7 +90,9 @@ func (k *KubeTools) ShowPodsInService(namespace string, serviceName string) {
 		panic(err.Error())
 	}
 	fmt.Println(svc.GetCreationTimestamp())
-	fmt.Println(svc.Spec)
+
+	s, _ := json.MarshalIndent(svc.Spec, "", "\t")
+	fmt.Print("Service Spec:\n", string(s), "\n")
 
 	// set pods for service
 	set := labels.Set(svc.Spec.Selector)
