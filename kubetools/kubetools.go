@@ -79,7 +79,7 @@ func (k *KubeTools) setClientset() {
 	}
 }
 
-func (k *KubeTools) FindPodsInService(namespace string, serviceName string) {
+func (k *KubeTools) ShowPodsInService(namespace string, serviceName string) {
 	k.setClientset()
 
 	var err error

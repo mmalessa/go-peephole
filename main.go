@@ -19,6 +19,6 @@ func main() {
 	namespace := viper.GetString("namespace")
 	serviceName := viper.GetString("servicename")
 
-	kubetools.FindPodsInService(namespace, serviceName)
+	kubetools.ShowPodsInService(namespace, serviceName)
 
 }
