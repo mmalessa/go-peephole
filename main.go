@@ -18,7 +18,9 @@ func main() {
 	kubetools := kubetools.NewKubetools()
 	namespace := viper.GetString("namespace")
 	serviceName := viper.GetString("servicename")
+	servicePort := viper.GetInt32("serviceport")
+	localPort := viper.GetInt32("localport")
 
-	kubetools.ShowPodsInService(namespace, serviceName)
+	kubetools.RedirectServicePort(namespace, serviceName, servicePort, localPort)
 
 }

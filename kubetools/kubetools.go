@@ -2,11 +2,10 @@ package kubetools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
@@ -39,17 +38,18 @@ import (
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/openstack"
 */
 
-type KubeTools struct {
+type kubeTools struct {
 	clientset          *kubernetes.Clientset
 	kubeConfigFileName *string
 }
 
-func NewKubetools() *KubeTools {
-	k := &KubeTools{}
+// NewKubetools Elo, elo
+func NewKubetools() *kubeTools {
+	k := &kubeTools{}
 	return k
 }
 
-func (k *KubeTools) setKubeConfigFileName() {
+func (k *kubeTools) setKubeConfigFileName() {
 	if k.kubeConfigFileName != nil {
 		return
 	}
@@ -61,7 +61,7 @@ func (k *KubeTools) setKubeConfigFileName() {
 	k.kubeConfigFileName = &configFileName
 }
 
-func (k *KubeTools) setClientset() {
+func (k *kubeTools) setClientset() {
 	if k.clientset != nil {
 		return
 	}
@@ -80,29 +80,55 @@ func (k *KubeTools) setClientset() {
 	}
 }
 
-func (k *KubeTools) ShowPodsInService(namespace string, serviceName string) {
-	k.setClientset()
-
-	var err error
-	// get service
+func (k *kubeTools) getService(namespace string, serviceName string) *v1.Service {
 	svc, err := k.clientset.CoreV1().Services(namespace).Get(context.TODO(), serviceName, metav1.GetOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
-	fmt.Println(svc.GetCreationTimestamp())
+	return svc
+}
 
-	s, _ := json.MarshalIndent(svc.Spec, "", "\t")
-	fmt.Print("Service Spec:\n", string(s), "\n")
+func (k *kubeTools) getPodPort(svc *v1.Service, servicePort int32) int32 {
+	for _, port := range svc.Spec.Ports {
+		if port.Port == servicePort {
+			return port.TargetPort.IntVal
+		}
+	}
+	panic("Port " + string(servicePort) + " not found in service spec")
+}
 
-	// set pods for service
+func (k *kubeTools) getPodsInService(namespace string, svc *v1.Service) *v1.PodList {
 	set := labels.Set(svc.Spec.Selector)
 	listOptions := metav1.ListOptions{LabelSelector: set.AsSelector().String()}
-	pods, err := k.clientset.CoreV1().Pods(namespace).List(context.TODO(), listOptions)
+	podList, err := k.clientset.CoreV1().Pods(namespace).List(context.TODO(), listOptions)
 	if err != nil {
 		panic(err.Error())
 	}
-	for _, pod := range pods.Items {
-		fmt.Fprintf(os.Stdout, "pod name: %v\n", pod.Name)
-	}
+	return podList
+}
 
+func (k *kubeTools) getPodFromPodList(podList *v1.PodList) *v1.Pod {
+	for _, item := range podList.Items {
+		return &item
+	}
+	panic("Empty podList.Items")
+}
+
+func (k *kubeTools) forward() {
+	fmt.Println("TODO")
+}
+
+func (k *kubeTools) RedirectServicePort(namespace string, serviceName string, servicePort int32, localPort int32) {
+	k.setClientset()
+	svc := k.getService(namespace, serviceName)
+	// debug
+	// s, _ := json.MarshalIndent(svc.Spec, "", "\t")
+	// fmt.Print("Service Spec:\n", string(s), "\n")
+
+	podList := k.getPodsInService(namespace, svc)
+	pod := k.getPodFromPodList(podList)
+	podPort := k.getPodPort(svc, servicePort)
+
+	fmt.Printf("Forward service: %s:%d (%s:%d) to localhost:%d\n", serviceName, servicePort, pod.Name, podPort, localPort)
+	k.forward()
 }
