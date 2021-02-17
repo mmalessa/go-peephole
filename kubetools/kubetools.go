@@ -3,13 +3,19 @@ package kubetools
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"path/filepath"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/portforward"
+	"k8s.io/client-go/transport/spdy"
 	"k8s.io/client-go/util/homedir"
 )
 
@@ -41,6 +47,9 @@ import (
 type kubeTools struct {
 	clientset          *kubernetes.Clientset
 	kubeConfigFileName *string
+	restConfig         *rest.Config //?
+	stopChan           chan struct{}
+	readyChan          chan struct{}
 }
 
 // NewKubetools Elo, elo
@@ -80,6 +89,17 @@ func (k *kubeTools) setClientset() {
 	}
 }
 
+func (k *kubeTools) setRestConfig() {
+	var err error
+	k.restConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{},
+	).ClientConfig()
+	if err != nil {
+		panic("Could not load kubernetes configuration file")
+	}
+}
+
 func (k *kubeTools) getService(namespace string, serviceName string) *v1.Service {
 	svc, err := k.clientset.CoreV1().Services(namespace).Get(context.TODO(), serviceName, metav1.GetOptions{})
 	if err != nil {
@@ -114,12 +134,55 @@ func (k *kubeTools) getPodFromPodList(podList *v1.PodList) *v1.Pod {
 	panic("Empty podList.Items")
 }
 
-func (k *kubeTools) forward() {
-	fmt.Println("TODO")
+func (k *kubeTools) dialer(namespace string, podName string) httpstream.Dialer {
+	url := k.clientset.CoreV1().RESTClient().Post().
+		Namespace(namespace).
+		Resource("pods").
+		Name(podName).
+		SubResource("portforward").URL()
+
+	transport, upgrader, err := spdy.RoundTripperFor(k.restConfig)
+	if err != nil {
+		panic("Could not create round tripper")
+	}
+	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", url)
+	return dialer
+}
+
+func (k *kubeTools) forward(namespace string, podName string, localPort int32, podPort int32) {
+	k.stopChan = make(chan struct{}, 1)
+	readyChan := make(chan struct{}, 1)
+	errChan := make(chan error, 1)
+
+	dialer := k.dialer(namespace, podName)
+	ports := []string{
+		fmt.Sprintf("%d:%d", localPort, podPort),
+	}
+
+	discard := ioutil.Discard
+	pf, err := portforward.New(dialer, ports, k.stopChan, readyChan, discard, discard)
+	if err != nil {
+		panic("Could not port forward into pod")
+	}
+
+	go func() {
+		errChan <- pf.ForwardPorts()
+	}()
+
+	select {
+	case err = <-errChan:
+		panic("Could not create port forward")
+	case <-readyChan:
+		// return
+		fmt.Println("Forward READY")
+	}
+
 }
 
 func (k *kubeTools) RedirectServicePort(namespace string, serviceName string, servicePort int32, localPort int32) {
 	k.setClientset()
+	k.setRestConfig()
+
 	svc := k.getService(namespace, serviceName)
 	// debug
 	// s, _ := json.MarshalIndent(svc.Spec, "", "\t")
@@ -130,5 +193,5 @@ func (k *kubeTools) RedirectServicePort(namespace string, serviceName string, se
 	podPort := k.getPodPort(svc, servicePort)
 
 	fmt.Printf("Forward service: %s:%d (%s:%d) to localhost:%d\n", serviceName, servicePort, pod.Name, podPort, localPort)
-	k.forward()
+	k.forward(namespace, pod.Name, localPort, podPort)
 }

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/mmalessa/go-kube-test/kubetools"
 	"github.com/spf13/viper"
 )
@@ -22,5 +25,6 @@ func main() {
 	localPort := viper.GetInt32("localport")
 
 	kubetools.RedirectServicePort(namespace, serviceName, servicePort, localPort)
-
+	time.Sleep(50 * time.Second)
+	fmt.Println("Forward STOP")
 }
