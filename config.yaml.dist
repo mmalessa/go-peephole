@@ -1,2 +1,4 @@
 namespace: "test"
 serviceName: "test"
+serviceport: 80
+localport: 28080
