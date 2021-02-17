@@ -24,7 +24,7 @@ func main() {
 	servicePort := viper.GetInt32("serviceport")
 	localPort := viper.GetInt32("localport")
 
-	kubetools.RedirectServicePort(namespace, serviceName, servicePort, localPort)
+	kubetools.ForwardServicePort(namespace, serviceName, servicePort, localPort)
 	time.Sleep(50 * time.Second)
 	fmt.Println("Forward STOP")
 }

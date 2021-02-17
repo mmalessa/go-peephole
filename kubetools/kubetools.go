@@ -149,12 +149,24 @@ func (k *kubeTools) dialer(namespace string, podName string) httpstream.Dialer {
 	return dialer
 }
 
-func (k *kubeTools) forward(namespace string, podName string, localPort int32, podPort int32) {
+func (k *kubeTools) ForwardServicePort(namespace string, serviceName string, servicePort int32, localPort int32) {
+	k.setClientset()
+	k.setRestConfig()
 	k.stopChan = make(chan struct{}, 1)
 	readyChan := make(chan struct{}, 1)
 	errChan := make(chan error, 1)
 
-	dialer := k.dialer(namespace, podName)
+	svc := k.getService(namespace, serviceName)
+	// debug
+	// s, _ := json.MarshalIndent(svc.Spec, "", "\t")
+	// fmt.Print("Service Spec:\n", string(s), "\n")
+
+	podList := k.getPodsInService(namespace, svc)
+	pod := k.getPodFromPodList(podList)
+	podPort := k.getPodPort(svc, servicePort)
+
+	fmt.Printf("Forward service: %s:%d (%s:%d) to localhost:%d\n", serviceName, servicePort, pod.Name, podPort, localPort)
+	dialer := k.dialer(namespace, pod.Name)
 	ports := []string{
 		fmt.Sprintf("%d:%d", localPort, podPort),
 	}
@@ -173,25 +185,6 @@ func (k *kubeTools) forward(namespace string, podName string, localPort int32, p
 	case err = <-errChan:
 		panic("Could not create port forward")
 	case <-readyChan:
-		// return
 		fmt.Println("Forward READY")
 	}
-
-}
-
-func (k *kubeTools) RedirectServicePort(namespace string, serviceName string, servicePort int32, localPort int32) {
-	k.setClientset()
-	k.setRestConfig()
-
-	svc := k.getService(namespace, serviceName)
-	// debug
-	// s, _ := json.MarshalIndent(svc.Spec, "", "\t")
-	// fmt.Print("Service Spec:\n", string(s), "\n")
-
-	podList := k.getPodsInService(namespace, svc)
-	pod := k.getPodFromPodList(podList)
-	podPort := k.getPodPort(svc, servicePort)
-
-	fmt.Printf("Forward service: %s:%d (%s:%d) to localhost:%d\n", serviceName, servicePort, pod.Name, podPort, localPort)
-	k.forward(namespace, pod.Name, localPort, podPort)
 }
